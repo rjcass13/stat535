@@ -1,0 +1,62 @@
+---
+title: "Star Power"
+author: "RJ Cass"
+format: pdf
+---
+
+The NBA All-star game is a showcase basketball game focused on being a showcase of NBA talent. Given the NBA is a Professional League, this game is usually the best of the best showing off, and has the potential to be a spectale. This game is played around mid-February (middle of the NBA season). Being a professional league, the players do get paid, but the winning team also wins money for a charity of their choice. Because it's a showcase, the game tends to be more flashy, with players going for big moves (slam-dunks, etc.).
+
+The players for the All-star game are picked via voting, with fans having 50% of the vote, and media and players each having 25% of the vote. The NBA is split into two conferences (East and West), and for the All-star game 12 players from each conference are selected. Previously voting was limited to players in specific positions, but starting in 2026 the voting will not be limited to positions. 
+
+```{r}
+library(tidyverse)
+asg <- read_csv("https://grimshawville.byu.edu/BYUStat535/NBATVaudience.csv")
+
+# Who was a 2003 All-Star?
+# Available at this site https://www.basketball-reference.com/allstar/NBA_2003.html
+# Michael Jordan, Shaq, Kobe
+
+# In the 2011 game, what team did LeBron James represent?
+# He was playing for the Heat at the time, and played for East Conference
+
+# What happened in 2016? Anybody from 2016 still playing?
+# First All-star game outside the US (in Canada)
+# East Conference head coach would have been one guy, but he was fired
+# Steph Curry, Lebron James, and others played, and are still playing
+
+# Other questions about this time period: 
+# Impact of Michael Jordan retiring in 2003?
+
+summary(asg)
+# Nielsen TV Audience: uses devices in a sample of homes to track what's watched, then estimate to the population
+
+# Hollinger's PER: Player Efficieny Rating. 15 is league average. (Positive Actions - Negative Actions)/minutes_player
+# best10: the PER of the 10th
+# The provided PER values are calculated over the whole season
+
+# Point Spread: betting +5 means that your team can lose by up to 5 points and you still win. Smaller values indicates an expected close game, which draws viewership
+
+library(GCally)
+install.packages('GCally')
+pairs(asg)
+
+plot(asg$Year, asg$TVaud) # Linearish, decreasing
+plot(asg$maxPER, asg$TVaud) # Not really any relationship
+plot(asg$best10PER, asg$TVaud) # Linearish, decreasing
+plot(asg$pointspread, asg$TVaud) # Linearish, weakly decreasing
+
+
+mod <- lm(sqrt(TVaud) ~ . + pointspread*maxPER + Year*maxPER, data = asg)
+plot(mod)
+# Other things to try: 
+cooks_d <- cooks.distance(mod)
+plot(cooks_d, type = "h", main = "Cook's Distance Plot", xlab = "Observation Index", ylab = "Cook's D")
+abline(h = 4/length(cooks_d), col = "red", lty = 2) # Common threshold
+text(which(cooks_d > 0.1), cooks_d[cooks_d > 0.1], labels = which(cooks_d > 0.1), pos = 3) # Label influential points
+
+# Index 9, Year 2011, seems to be an outlier/odd value
+# Indeces 11 and 1 are also rough
+
+summary(mod)
+```
+
