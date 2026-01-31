@@ -1,0 +1,68 @@
+---
+title: "Star Power"
+author: "RJ Cass"
+execute:
+  echo: false
+format: 
+  pdf:
+    include-in-header:
+      text: |
+        \usepackage{caption}
+        \captionsetup{textfont={it}, font=small} 
+        \usepackage{amsmath}
+geometry: "margin=1in"
+---
+
+```{r, include = FALSE}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+asg <- read_csv("https://grimshawville.byu.edu/BYUStat535/NBATVaudiencePAPER.csv")
+```
+
+# Introduction
+
+The NBA All-Star game is an annual game played in the middle of the NBA season (mid-February) designed to be a showcase of player talents. It is part of the All-Star weekend, a 3 day event full of various showcases and competitions to highlight top NBA talen. The All-Star game is a standard basketball game (5 v 5, total team size of 10) where each NBA conference (East and West) fields a team. Players for the teams are selected via a combination of fan voting (50% weight) and media/player voting (25% weight each). To ensure the game remains competitive, the players in each game win an amount of money depending on whether their team wins or looses, and the winning team receives money for a charity of their choice. 
+
+Because this is match is not a standard season match, and is generally loaded with top talent, the play tends to be more weighted towards offense rather than defense, with games having very high scores. Players use this as an opportunity to 'show-off' going for flashy moves, impressive dunks, etc. 
+
+We want to understand how 'Star Power', or someone being a recognizable invididual both amongst fans and those who don't normally watch basketball, impacts viewership at an NBA All-Star game. We want to maximize the viewership for these games, so understanding what kind of impact 'Star Power' has will help us better prepare for future years. 
+
+
+# Data
+
+For this analysis we are using the NBA TV Audience dataset. This dataset consist of data aggregated per NBA market (more or less the geographical region), and year. A summary of this data is provided in @tbl-summary_stats. For a given market for a given year, we have
+
+```{r tbl-summary_stats}
+mySummary <- function(x) {
+  c(mean = round(mean(x), 2), sd = round(sd(x), 2), min = min(x), max = max(x))
+}
+transposed_summary <- t(apply(asg[, -1], 2, mySummary))
+clean_table <- as.data.frame(cbind(colnames(asg[, -1]), transposed_summary))
+colnames(clean_table) <- c('Variable', 'Mean', 'SD', 'Max', 'Min')
+rownames(clean_table) <- NULL
+
+kable(clean_table, longtable = TRUE, row.names = FALSE) %>%
+  kable_styling(latex_options = "repeat_header")
+```
+
+
+
+
+Explain all the variables, as well as how to interpret the coefficients.
+
+Provide details about certain data points that might be interesting (2003 data with Michael Jordan, etc.)
+
+What about alternatives to other data that might be useful.
+
+AllStats: # all stars on team from that region (just local or secondary)
+Starts: # same as allstars but if they are a starter (.start)
+Team: Winning percentage (.atbreak)
+Host: Did that team host the allstar game (.host)
+
+
+$$
+\begin{aligned}
+ln(Y_{it}) = &\beta_{0i} + \beta_1 ln(Y_{i, t-1}) + \beta_2 ln(Y_{i, t-2}) + \beta_3 maxPER_t
+\end{aligned}
+$$
