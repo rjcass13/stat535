@@ -1,0 +1,23 @@
+---
+title: Property Assesssment
+author: RJ Cass
+execute:
+  echo: false
+format: 
+  pdf:
+    include-in-header:
+      text: |
+        \usepackage{caption}
+        \captionsetup{textfont={it}, font=small} 
+        \usepackage{amsmath}
+geometry: "margin=1in"
+---
+
+```{r read_data}
+suppressPackageStartupMessages(library(tidyverse))
+
+
+HomeSales <- read_csv("https://grimshawville.byu.edu/BYUStat535/ironco.csv")
+```
+
+
