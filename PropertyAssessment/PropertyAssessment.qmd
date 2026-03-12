@@ -13,11 +13,186 @@ format:
 geometry: "margin=1in"
 ---
 
-```{r read_data}
+# Abstract
+
+We have a dataset of sales price for homes in Iron County, with corresponding home metrics. We used this dataset to create a linear model to provide estimated home values of a given home using the following variables: lot size, square-footage of the home, number of bathrooms, whether there is a garage, whehter there is a bathroom, roof quality, and effective age. This model can also be used to provide explanations for why a given home has a certain estimated value. 
+
+```{r read_data, include = FALSE}
 suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(knitr))
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(MASS))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(interactions))
+
 
 
 HomeSales <- read_csv("https://grimshawville.byu.edu/BYUStat535/ironco.csv")
+HomeSales$basmt <- as.factor(HomeSales$basmt)
+HomeSales$gar <- as.factor(HomeSales$gar)
 ```
 
 
+# Introduction
+
+We have a dataset of the sale prices of homes in Iron County, Utah from 1990 to 1994. These data were provided by the county, where an assessor went to each property and provided various metrics about the property/home. We want to use these data to provide estimates of how much a home is worth and why, and to help home owners know what might be done to improve the value of a home. 
+
+### Data
+
+The dataset consists of home metrics: sale price, various 'count' metrics (bathrooms 'baths', floors 'floors', garage 'gar', basement 'basmt'), various 'quality' metrics (construction quality 'const', roof condition 'roof', home condition 'quality'), area metrics (lot acreage 'lot', home square-feet area 'area'), and age metrics (year built 'yr_built', effective age 'eff_age'). A summary of this data is provided in @tbl-summary. 
+
+The quality metrics were determined by the assesor upon inspection of the property. The effective age of the home takes is based on the actual age of the home, but takes into account renovations, additions, upgrades, etc. performed on the house/property which have 'modernized' the property. Thus, it is possible to have a house built 70 years ago with an effective age of 20, and another house built 30 years ago with an effective age of 25. 
+
+```{r tbl-summary}
+#| tbl-cap: "Summary statistics of the Home Salesprice Variates"
+mySummary <- function(x) {
+  c(mean = round(mean(x[x != 0]), 2), sd = round(sd(x[x != 0]), 2), min = min(x[x != 0]), max = max(x[x != 0]))
+}
+
+reg_summ <- t(apply(HomeSales[, c(1:4, 6, 8:12)], 2, mySummary))
+reg_var_summ <- as.data.frame(cbind(colnames(HomeSales[, c(1:4, 6, 8:12)]), reg_summ))
+colnames(reg_var_summ) <- c('Variable', 'Mean', 'SD', 'Min', 'Max')
+rownames(reg_var_summ) <- NULL
+
+kable(reg_var_summ, longtable = TRUE, row.names = FALSE) %>%
+  kable_styling(latex_options = "repeat_header")
+```
+
+There are also 2 factor variables (garage and basement), both of which are just 0/1 indicators of whether the house has it. An important thing to note is that for the quality metrics, we have a restricted range of provided values. While the quality scale can range from 1 to 5, we only have provided values of 2 through 4 for construction quality, 2 and 3 for roof quality, and 3 and 4 for home quality. This will result in any model
+
+### Data Exploration
+
+In general, considering how each metric affects the quality of a home, we would expect all variables to have a positive correlation with sale price (as the value increases, so does the sales price), with the exception of the effective age, which we would expect to be negatively correlated (as it increases, sales price would decrease). This is shown in @fig-pairs via scatterplots of the continous variables. 
+
+```{r fig-pairs}
+#| fig-cap: "Plots showing correlation between different variates"
+pairs(HomeSales[, c(1:3, 11, 12)])
+```
+
+It is clear that year built and effective age are very heavily correlated. Having them both in the model does not make much sense, and can actually result in unintutive model behavior. For example, we fit a linear model using all available variates, which results in effective age having a positive coefficient (see @tbl-bad_coefs), which is not what we would expect. As such we will exclude year built from our modeling, and only use effective age as we believe that is a better representation of a home's quality. 
+
+There also appears to be some measure of collinearity between lot and area (which intuitively makes sense: larger plots of lands yield more areaa for a house), and area and effective age. As such, we will include interaction terms for these in our model. 
+
+```{r tbl-bad_coefs}
+#| tbl-cap: "Estimated coefficients from a model using all variates. Note the positive value under 'eff_age'"
+model <- lm(price ~ ., data = HomeSales)
+coef(model)
+```
+
+# Methodology
+
+With our model motivations (be able to predict a home's value, and explain to someone why it has that estimated value), we need a model that has interpretable coefficients, and that is able to make predictions on new data. 
+
+To this end we will create a linear model of the form $y = x^{\top}\beta + \epsilon, \epsilon \sim N(0, \sigma^2I)$, where $y$ is the price of the home, $x^{\top}\beta$ is the variates and their corresponding coefficient estimates, and $\epsilon$ is the vector of random noise associated with the measurements. We will use AIC hybrid variable selection to create a model using just the most significant variables.
+
+This linear model will allow us to have easily interpretable coefficients (ie. increasing the house quality by X amount will increase the estimated sales price by Y dollars). Reducing the number of variables via AIC selection will further increase the interpretability of the model and its results. 
+
+# Results
+
+```{r model, include = FALSE}
+mod <- lm(price ~ . - yr_built + lot*area + area*eff_age, data = HomeSales)
+mod <- stepAIC(mod, direction = "both")
+is_rmse <- format(sqrt(mean(mod$residuals^2)), scientific = FALSE)
+summary(mod)
+```
+
+```{r loocv}
+n <- nrow(HomeSales)
+loocv_error <- numeric(n)
+for (i in 1:n) {
+  train <- HomeSales[-i, ]
+  test <- HomeSales[i, ]
+
+  loocv_mod <- lm(price ~  + lot*area + baths + gar + basmt + roof + eff_age, data = train)
+  p <- predict(loocv_mod, newdata = test)
+  loocv_error[[i]] <- (p - test$price)
+}
+
+oos_rmse <- format(round(sqrt(sum(loocv_error^2)/n), 2), scientific = FALSE)
+```
+
+We fit a model following the above outline, and the resulting variables and their estimated coefficients (and their corresponding 95% confidence intervals) are provided in @tbl-sig_coefs. As shown in the table, the selected variables are lot size, square-footage of the home, number of bathrooms, whether there is a garage, whether there is a basement, roof quality, effective age, and the interaction between lot and area. This model has an In-Sample RMSE of `r is_rmse`. We also performed Leave-one-out Cross Validation and obtained an Out of Sample RMSE of `r oos_rmse`.
+
+```{r tbl-sig_coefs}
+#| tbl-cap: "Estimated coefficients of final model, with their corresponding 95% Confidence Intervals"
+get_sig_coefs <- function(mod) {
+  coefs <- as.data.frame(summary(mod)$coefficients)
+  coefs$Variable <- rownames(summary(mod)$coefficients)
+  conf <- as.data.frame(confint(mod))
+  conf$Variable <- rownames(confint(mod))
+  coefs$Lower <- conf$`2.5 %`
+  coefs$Upper <- conf$`97.5 %`
+  sig_terms <- coefs[c("Variable", "Estimate", "Lower", "Upper")]
+  sig_terms[, 2:4] <- round(sig_terms[, 2:4], 2)
+  sig_terms
+}
+
+sig_coefs <- get_sig_coefs(mod)
+kable(sig_coefs, longtable = TRUE, row.names = FALSE) %>%
+  kable_styling(latex_options = "repeat_header")
+```
+
+Notice that the coefficients for Lot and Area are now negative. This is because their interaction has a large positive impact. This is unintuitive initially, but when taken into account with the interaction makes more sense. This relationship is shown in @fig-int_plot: as Lot increases, the slope of the effect of Area also increases. This plot shows that even though the individual coefficients for Lot and Area are negative, the interaciton dominates the effect within the range of the data. If we imagine a situation where two homeowners have the same lot sizes but different home areas, if the lot is small, the difference in estimated value will be realtively small. If the lots are large, the difference in estimated values will be larger. 
+
+```{r fig-int_plot}
+#| fig-cap: "Plot of the interaction effect of Lot and Area. As Lot increases, the slope of the Area effect increases"
+lot <- seq(.05, .6, length = 5)
+area <- seq(600, 2000, length = 5)
+baths <- 2
+gar <- 0
+floors <- 1
+basmt <- 1
+roof <- 3
+eff_age <- 5
+grid <- expand.grid(lot, area, baths, gar, floors, basmt, roof, eff_age)
+grid <- as.data.frame(grid)
+colnames(grid) <- c('lot', 'area', 'baths', 'gar', 'floors', 'basmt', 'roof', 'eff_age')
+grid$basmt <- as.factor(grid$basmt)
+grid$gar <- as.factor(grid$gar)
+# levels(grid$gar)
+# levels(grid$basmt)
+levels(grid$basmt) <- levels(HomeSales$basmt)
+levels(grid$gar) <- levels(HomeSales$gar)
+
+grid$pred <- predict(mod, newdata = grid)
+
+
+
+ggplot(grid, aes(x = area, y = pred, color = lot, group = lot)) +
+  geom_line() +
+  scale_color_viridis_c() + 
+  theme_minimal() +
+  labs(title = "Interaction of Lot and Area",
+       y = "Price", x = "Area",
+       color = "Lot")
+```
+
+We can use the provided model coefficients to explain to a home-owner why their estimated home value is a certain number. For example, if they are comparing their home to their neighbor's home, we can look at the differences to explain what the difference in cost is. If their owner has a home that is the same in all ways to the neighbor's home except the owner's home has 2 bathrooms and the neighbor has 3 bathrooms, we can explain that having 1 less bathroom decreases the estimated home price by ~$6000. 
+
+In a similar way, we can use the coefficients to inform homeowners what changes to a home would most influence their estimate home cost. If a homeowner is considering whether they should add a garage, or fix their roof, we can refer to the coefficients and show them that adding a garage would add approximately ~$5,500 to the home's value, whereas fixing the roof enough to increase it by 1 point would increase the estimated home value by ~$18,100. The homeowner can then look at the cost of each task to see which would be most valuable to them. 
+
+```{r predict}
+case <- data.frame(lot = 0.25, area = 1300, baths = 2, gar = factor(1, levels = c(0, 1)), 
+                    basmt = factor(0, levels = c(0, 1)), roof = 3, eff_age = 5)
+pred_ci <- round(predict(mod, newdata = case, , interval = "prediction", level = 0.95), 2)
+```
+
+Using this model, for a given house, we can provide an estimated range of the home's value. For example, for a house that has the parameters provided in @tbl-example_params, we predict the home will have a value within the range of `r scales::dollar(pred_ci[, 2])` to `r scales::dollar(pred_ci[, 3])`
+
+|Variable | Value |
+|:-------|:----:|
+| Lot | 0.25|
+|Area | 1300 |
+| Baths | 2|
+|Garage | Yes| 
+|Basement | No | 
+|Roof Quality| 3|
+|Effective Age | 5|
+: Example home metrics values {#tbl-example_params}
+
+
+# Conclusion
+
+We used the Iron County home sale price dataset to create a linear model. We performed variable selection to create a model that depends on lot size, square-footage of the home, number of bathrooms, whether there is a garage, whether there is a bathroom, roof quality, and effective age, with an In-Sample RMSE of `r is_rmse`. We demonstrated how this model can be used to answer expected questions from homeowners, such as why their estimated homevalue is what it is, or what added features to their house would most increase the value. 
+
+Moving forward, we believe there are improvements that could be made to the dataset to allow for better prediction. Primarily, we believe there are factors that impact a home's value which are not included here. Some examples include a measure of how near the closest neighbor is, or how busy the road they live on is, or how close they are to a city center, etc. We also believe this is a study that could be applied to other counties as well, where 'county' is treated as a factor allowing us to study a larger dataset, and take into account larger area differences. 

@@ -9,7 +9,7 @@ HomeSales[HomeSales$const == 2, ]
 HomeSales[HomeSales$area == 544, ]
 HomeSales[HomeSales$price == 11500, ]
 
-pairs(HomeSales[, c(2 : 12, 1)])
+pairs(HomeSales[, c(2:10, 12)])
 mod <- lm(price ~ ., data = HomeSales)
 plot(mod)
 summary(mod)
@@ -30,7 +30,7 @@ summary(mod)
 
 # Expected Non-linear?
 # perhaps area/lot with price. I don't think I expect that to be linear, maybe something that starts to plateau after a while
-# perhaps the quality metrics as well (though they are ordinal so maybe can't just call it linear anyway)
+# perhaps the quality metrics as well (though they are discrete so maybe can't just call it linear anyway)
 # probably yr_built/eff_age. Be surprised is it's just linear. Maybe after a certain age it's just 'old'
 
 
